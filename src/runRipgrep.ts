@@ -38,6 +38,7 @@ export async function runRipgrep(
     "-F", // --fixed-strings: Treat searchTerm as a literal
     "--vimgrep", // Output format: {file}:{line}:{col}:{text}
     "--ignore-case", // Case-insensitive
+    "--max-count=100", // Limit to 100 matches per file for performance
     searchTerm, // The search term
     ".", // Search the current directory
   ];
@@ -96,8 +97,11 @@ export async function runRipgrep(
         })
         .filter((p): p is RipgrepResult => p !== null);
 
-      // 8. Resolve the promise with the results
-      resolve(results);
+      // 8. Limit total results to prevent UI lag (max 500 results)
+      const limitedResults = results.slice(0, 500);
+
+      // 9. Resolve the promise with the limited results
+      resolve(limitedResults);
     });
 
     // 9. Handle errors in starting the process itself
