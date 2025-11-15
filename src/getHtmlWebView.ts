@@ -169,14 +169,19 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
           color: var(--vscode-list-activeSelectionForeground); 
         }
         /* The (description) part of the file item */
-        .file-item small { 
-            color: var(--vscode-descriptionForeground); 
-            margin-left: 8px; 
+        .file-item small {
+            color: var(--vscode-descriptionForeground);
+            margin-left: 8px;
+        }
+        /* Line number in search results */
+        .line-num {
+            color: var(--vscode-textLink-foreground);
+            opacity: 0.9;
         }
         /* e.g., "No results found." */
-        .info-text { 
-            padding: 8px 12px; 
-            color: var(--vscode-descriptionForeground); 
+        .info-text {
+            padding: 8px 12px;
+            color: var(--vscode-descriptionForeground);
         }
     </style>
 </head>
@@ -388,7 +393,18 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
                             item.dataset.line = result.line;
 
                             const label = document.createElement('span');
-                            label.textContent = result.label; // e.g., "file.ts:10"
+                            // Split label into filename and line number (e.g., "file.ts:10" -> ["file.ts", "10"])
+                            const labelParts = result.label.split(':');
+                            if (labelParts.length === 2) {
+                                label.textContent = labelParts[0] + ':';
+                                const lineNum = document.createElement('span');
+                                lineNum.className = 'line-num';
+                                lineNum.textContent = labelParts[1];
+                                label.appendChild(lineNum);
+                            } else {
+                                label.textContent = result.label;
+                            }
+
                             const description = document.createElement('small');
                             description.textContent = result.description; // e.g., "const foo = ..."
 
