@@ -1,13 +1,17 @@
 {
   "name": "vscode-telescope",
   "displayName": "Vscode - Telescope",
-  "description": "",
-  "version": "0.0.2",
+  "description": "Fast, interactive file content search powered by ripgrep with live preview and syntax highlighting",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.105.0"
   },
   "icon": "media/logo.jpg",
-  "publisher": "talhaAksoy",
+  "publisher": "niallobrien",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/niallobrien/Telescope-Search"
+  },
   "categories": [
     "Other"
   ],
