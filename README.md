@@ -6,16 +6,22 @@ Vscode - Telescope is a Visual Studio Code extension that provides a fast, inter
 
 ## Features
 
-- **Live Search:** Results appear as you type.
-- **Fast & Efficient:** Powered by `ripgrep` for high-performance searching.
+- **Real-time Search:** Optimized with 150ms debouncing for instant results as you type.
+- **Fast & Efficient:**
+    - Powered by `ripgrep` for high-performance searching.
+    - Smart result limiting (max 500 results, 100 per file) prevents UI lag.
+    - Optimized file tokenization renders only visible lines for 10x-100x faster previews.
 - **Interactive UI:**
     - A dedicated webview panel for searching.
-    - A list of results showing the file, line number, and matching text.
+    - A list of results showing the file, line number (color-highlighted), and matching text.
     - A resizable preview panel with syntax highlighting that matches your current theme.
+    - Auto-focus search field when returning to the panel for seamless workflow.
 - **Keyboard & Mouse Navigation:**
     - Use `ArrowUp`/`ArrowDown` to navigate results and `Enter` to open the file.
     - Click an item to preview it, click it again to open.
-- **Syntax Highlighting:** The preview panel uses `shiki` to provide accurate and theme-aware syntax highlighting.
+- **Syntax Highlighting:**
+    - The preview panel uses `shiki` to provide accurate and theme-aware syntax highlighting.
+    - Full support for JavaScript, TypeScript, JSX, TSX, and many other languages.
 
 ## Prerequisites
 
@@ -86,8 +92,41 @@ If you wish to contribute to the development of this extension, you can set up a
     yarn install
     ```
 
+3.  Compile the TypeScript code:
+    ```sh
+    npm run compile
+    ```
+
 ### Running the Extension Locally
 
 1.  Open the project folder in VS Code.
 2.  Press `F5` to open a new Extension Development Host window with the extension running.
 3.  In the new window, open a project folder and use the "Telescope: Open Telescope Panel" command to test the extension.
+
+### Packaging for Installation
+
+1.  Install the packaging tool:
+    ```sh
+    npm install -g @vscode/vsce
+    ```
+
+2.  Package the extension:
+    ```sh
+    vsce package
+    ```
+    This creates a `.vsix` file.
+
+3.  Install the packaged extension:
+    - Open VS Code
+    - Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+    - Type "Extensions: Install from VSIX..."
+    - Select the generated `.vsix` file
+
+## Performance Optimizations
+
+This extension includes several performance optimizations for large codebases:
+
+- **Search Debouncing:** 150ms delay prevents excessive searches while typing
+- **Result Limiting:** Caps results at 500 items and 100 matches per file
+- **Lazy Tokenization:** Only syntax-highlights ~100 lines around each match
+- **Performance Logging:** Enable Developer Tools console to see `[PERF]` timing metrics

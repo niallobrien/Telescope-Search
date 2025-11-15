@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run compile:*)"
+      "Bash(npm run compile:*)",
+      "Bash(npx @vscode/vsce package:*)",
+      "Bash(npm install)"
     ],
     "deny": [],
     "ask": []
