@@ -387,7 +387,7 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
                             item.dataset.filePath = result.filePath;
                             item.dataset.line = result.line;
 
-                            const label = document.createElement('strong');
+                            const label = document.createElement('span');
                             label.textContent = result.label; // e.g., "file.ts:10"
                             const description = document.createElement('small');
                             description.textContent = result.description; // e.g., "const foo = ..."

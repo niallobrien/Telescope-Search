@@ -78,7 +78,7 @@ export async function runRipgrep(
       const lines = stdoutData.split("\n").filter((line) => line.length > 0);
 
       const results: RipgrepResult[] = lines
-        .map((line) => {
+        .map((line): RipgrepResult | null => {
           const parts = line.split(":");
           if (parts.length < 4) {
             return null;
