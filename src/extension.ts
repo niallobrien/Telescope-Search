@@ -6,7 +6,10 @@ import * as path from 'path';
 // Import Shiki types for v1+ (ESM) from a CommonJS module.
 // 'with { 'resolution-mode': 'import' }' is required by modern TypeScript
 // to correctly resolve the types from an ES module.
+// quick-lint-js doesn't understand TypeScript import attributes
+/* quick-lint-js-disable */
 import type { Highlighter, BundledLanguage } from 'shiki' with { 'resolution-mode': 'import' };
+/* quick-lint-js-enable */
 
 /**
  * Defines the structure for a single search result from Ripgrep.
@@ -45,7 +48,9 @@ let highlighter: Highlighter | undefined;
  * The imported Shiki module namespace.
  * Used to call 'createHighlighter'.
  */
+/* quick-lint-js-disable */
 let shiki: typeof import('shiki', { with: { 'resolution-mode': 'import' } });
+/* quick-lint-js-enable */
 
 /**
  * Maps a file extension to a Shiki language identifier.
@@ -61,10 +66,14 @@ function getLangId(filePath: string): BundledLanguage {
     case 'mjs':
     case 'cjs':
       return 'javascript';
+    case 'jsx':
+      return 'jsx';
     case 'ts':
     case 'mts':
     case 'cts':
       return 'typescript';
+    case 'tsx':
+      return 'tsx';
     case 'html':
     case 'htm':
       return 'html';
@@ -195,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext) {
     highlighter = await shiki.createHighlighter({
       themes: [currentTheme, 'vitesse-dark', 'vitesse-light'],
       langs: [
-        'javascript', 'typescript', 'html', 'css', 'json', 'markdown', 'text'
+        'javascript', 'jsx', 'typescript', 'tsx', 'html', 'css', 'json', 'markdown', 'text'
       ]
     });
   }
@@ -210,7 +219,7 @@ export async function activate(context: vscode.ExtensionContext) {
         highlighter = await shiki.createHighlighter({
           themes: [currentTheme, 'vitesse-dark', 'vitesse-light'],
           langs: [
-            'javascript', 'typescript', 'html', 'css', 'json', 'markdown', 'text'
+            'javascript', 'jsx', 'typescript', 'tsx', 'html', 'css', 'json', 'markdown', 'text'
           ]
         });
       } catch (e) {
@@ -268,6 +277,9 @@ export async function activate(context: vscode.ExtensionContext) {
           // 'search': User is typing in the search box
           case 'search':
             const searchTerm = message.text;
+            const searchStartTime = Date.now();
+            console.log(`[PERF] Search started for: "${searchTerm}"`);
+
             // Don't search for empty or single-character strings
             if (!searchTerm || searchTerm.length <= 2) {
               panel.webview.postMessage({ command: 'results', data: [] });
@@ -275,9 +287,17 @@ export async function activate(context: vscode.ExtensionContext) {
             }
             try {
               // Run the Ripgrep search
+              const ripgrepStartTime = Date.now();
               const results = await runRipgrep(searchTerm, context);
+              const ripgrepDuration = Date.now() - ripgrepStartTime;
+              console.log(`[PERF] Ripgrep completed in ${ripgrepDuration}ms, found ${results.length} results`);
+
               // Send results back to the webview
+              const sendStartTime = Date.now();
               panel.webview.postMessage({ command: 'results', data: results });
+              const sendDuration = Date.now() - sendStartTime;
+              console.log(`[PERF] Results sent to webview in ${sendDuration}ms`);
+              console.log(`[PERF] Total search time: ${Date.now() - searchStartTime}ms`);
             } catch (e) {
               console.error(e);
               panel.webview.postMessage({ command: 'error', data: String(e) });
@@ -304,6 +324,8 @@ export async function activate(context: vscode.ExtensionContext) {
           // 'getPreview': User selected a new item in the list
           case 'getPreview':
             const { filePath: previewFilePath, line: previewLine, searchTerm: previewSearchTerm } = message.data;
+            const previewStartTime = Date.now();
+            console.log(`[PERF] Preview requested for: ${path.basename(previewFilePath)}:${previewLine}`);
 
             if (!previewFilePath || !previewLine || !highlighter) {
               return; // Highlighter not ready
@@ -314,14 +336,31 @@ export async function activate(context: vscode.ExtensionContext) {
               const fileUri = vscode.Uri.file(previewFilePath);
               const fileBytes = await vscode.workspace.fs.readFile(fileUri);
               const fileContent = Buffer.from(fileBytes).toString('utf-8');
+              const allLines = fileContent.split('\n');
 
-              // 2. Get language ID and current VS Code theme
+              // 2. Calculate visible range (optimized - only tokenize what's needed)
+              // The frontend renders ~60 lines centered on the target
+              const targetLineIndex = parseInt(previewLine, 10) - 1; // 1-based to 0-based
+              const totalLines = allLines.length;
+              const linesToRender = 100; // Render slightly more than frontend displays
+
+              let startLine = Math.max(0, targetLineIndex - Math.floor(linesToRender / 2));
+              let endLine = Math.min(totalLines, startLine + linesToRender);
+
+              // Adjust if we're near the end
+              if (endLine - startLine < linesToRender) {
+                startLine = Math.max(0, endLine - linesToRender);
+              }
+
+              // 3. Extract only the visible portion
+              const visibleLines = allLines.slice(startLine, endLine);
+              const visibleContent = visibleLines.join('\n');
+
+              // 4. Get language ID and current VS Code theme
               let lang = getLangId(previewFilePath);
               try {
-                // Bu komut, 'kotlin' gibi dilleri ihtiyaç anında yükleyecektir.
                 await highlighter.loadLanguage(lang);
               } catch (langError) {
-                // Dil bulunamazsa 'text'e düş
                 console.warn(`Shiki language '${lang}' not found. Falling back to 'text'.`);
                 //@ts-ignore
                 lang = 'text';
@@ -330,13 +369,25 @@ export async function activate(context: vscode.ExtensionContext) {
 
               const theme = currentTheme;
 
-              // 3. Generate syntax-highlighted tokens using Shiki
-              const tokenLines = highlighter.codeToTokens(fileContent, {
+              // 5. Generate syntax-highlighted tokens ONLY for visible portion
+              const visibleTokenLines = highlighter.codeToTokens(visibleContent, {
                 lang: lang,
                 theme: theme
-              }).tokens; // .tokens is the array of tokenized lines
+              }).tokens;
 
-              // 4. Send the tokens back to the webview for rendering
+              // 6. Create full array with empty lines before/after visible portion
+              const tokenLines: any[] = new Array(totalLines);
+              for (let i = 0; i < startLine; i++) {
+                tokenLines[i] = []; // Empty line placeholder
+              }
+              for (let i = 0; i < visibleTokenLines.length; i++) {
+                tokenLines[startLine + i] = visibleTokenLines[i];
+              }
+              for (let i = endLine; i < totalLines; i++) {
+                tokenLines[i] = []; // Empty line placeholder
+              }
+
+              // 7. Send the tokens back to the webview for rendering
               panel.webview.postMessage({
                 command: 'previewContent',
                 data: {
@@ -345,6 +396,7 @@ export async function activate(context: vscode.ExtensionContext) {
                   searchTerm: previewSearchTerm
                 }
               });
+              console.log(`[PERF] Preview completed in ${Date.now() - previewStartTime}ms`);
             } catch (e: any) {
               // Handle file read or tokenization errors
               console.error(e);

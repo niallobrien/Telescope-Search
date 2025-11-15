@@ -210,7 +210,9 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
             // --- 2. State Variables ---
             let selectedIndex = 0; // Current selection index in the file list
             let previewDebounceTimer; // Timer for debouncing preview requests
+            let searchDebounceTimer; // Timer for debouncing search requests
             const PREVIEW_DEBOUNCE_DELAY = 50; // ms to wait before fetching preview
+            const SEARCH_DEBOUNCE_DELAY = 150; // ms to wait before executing search
 
             // Auto-focus the search box when the webview is opened
             searchBox.focus();
@@ -238,13 +240,25 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
 
             /**
              * Event: User types in the search box.
-             * On every keystroke, send the current value to the extension back-end.
+             * Debounced to avoid triggering searches on every keystroke.
              */
             searchBox.addEventListener('input', (event) => {
                 const searchTerm = event.target.value;
-                // Send 'search' command to extension.ts
-                vscode.postMessage({ command: 'search', text: searchTerm });
-                if (!searchTerm) { previewDiv.innerHTML = ''; } // Clear preview if search is empty
+
+                // Clear any pending search
+                clearTimeout(searchDebounceTimer);
+
+                if (!searchTerm) {
+                    // If search is cleared, immediately clear results and preview
+                    filesDiv.innerHTML = '';
+                    previewDiv.innerHTML = '';
+                    return;
+                }
+
+                // Debounce the search request
+                searchDebounceTimer = setTimeout(() => {
+                    vscode.postMessage({ command: 'search', text: searchTerm });
+                }, SEARCH_DEBOUNCE_DELAY);
             });
 
             /**
@@ -338,14 +352,17 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
                     // Command: 'results'
                     // Sent when new search results are available from Ripgrep.
                     case 'results':
+                        const resultsStartTime = performance.now();
+                        console.log('[PERF] Results received, starting render');
+
                         filesDiv.innerHTML = ''; // Clear old results
                         previewDiv.innerHTML = ''; // Always clear preview on new results
                         const results = message.data;
-                        
+
                         if (results.length === 0) {
                             filesDiv.innerHTML = '<p class="info-text">No results found.</p>';
                             selectedIndex = -1; // No item is selected
-                            
+
                             // BUGFIX: When "No results" is returned, we must call
                             // highlightSelectedItem with an empty list. This accomplishes two things:
                             // 1. It clears any pending preview request (from the debounce).
@@ -355,31 +372,41 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
                             // appears next to a "No results" message.
                             highlightSelectedItem(filesDiv.querySelectorAll('.file-item'));
 
-                            return; 
+                            return;
                         }
-                        
+
+                        const renderStartTime = performance.now();
+                        console.log(\`[PERF] Rendering \${results.length} results\`);
+
                         // Populate the file list
-                        results.forEach((result, index) => { 
+                        results.forEach((result, index) => {
                             const item = document.createElement('div');
                             item.className = 'file-item';
                             // Store data on the element for later retrieval
-                            item.dataset.index = index; 
-                            item.dataset.filePath = result.filePath; 
-                            item.dataset.line = result.line; 
-                            
+                            item.dataset.index = index;
+                            item.dataset.filePath = result.filePath;
+                            item.dataset.line = result.line;
+
                             const label = document.createElement('strong');
                             label.textContent = result.label; // e.g., "file.ts:10"
                             const description = document.createElement('small');
                             description.textContent = result.description; // e.g., "const foo = ..."
-                            
+
                             item.appendChild(label);
                             item.appendChild(description);
                             filesDiv.appendChild(item);
                         });
-                        
+
+                        const renderDuration = performance.now() - renderStartTime;
+                        console.log(\`[PERF] DOM rendering took \${renderDuration.toFixed(2)}ms\`);
+
                         // Select the first item by default
-                        selectedIndex = 0; 
+                        const selectStartTime = performance.now();
+                        selectedIndex = 0;
                         highlightSelectedItem(filesDiv.querySelectorAll('.file-item'));
+                        const selectDuration = performance.now() - selectStartTime;
+                        console.log(\`[PERF] Item selection took \${selectDuration.toFixed(2)}ms\`);
+                        console.log(\`[PERF] Total UI update: \${(performance.now() - resultsStartTime).toFixed(2)}ms\`);
                         break;
                     
                     // Command: 'error'
@@ -391,6 +418,9 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
                     // Command: 'previewContent'
                     // Sent when the syntax-highlighted tokens for a file arrive from Shiki.
                     case 'previewContent':
+                        const previewRenderStart = performance.now();
+                        console.log('[PERF] Preview content received, starting render');
+
                         const { tokenLines, line, searchTerm } = message.data;
                         previewDiv.innerHTML = ''; // Clear old preview
                         
@@ -506,11 +536,14 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
 
                         pre.appendChild(code);
                         previewDiv.appendChild(pre);
-                        
+
                         // Scroll the highlighted line to the center of the panel
                         if (highlightedElement) {
                             highlightedElement.scrollIntoView({ behavior: 'auto', block: 'center' });
                         }
+
+                        const previewRenderDuration = performance.now() - previewRenderStart;
+                        console.log(\`[PERF] Preview render completed in \${previewRenderDuration.toFixed(2)}ms\`);
                         break;
                     
                     // Command: 'themeChanged'
