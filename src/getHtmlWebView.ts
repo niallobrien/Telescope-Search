@@ -222,6 +222,11 @@ export function getHtmlForWebview(webview: vscode.Webview, context: vscode.Exten
             // Auto-focus the search box when the webview is opened
             searchBox.focus();
 
+            // Re-focus search box when returning to the panel
+            window.addEventListener('focus', () => {
+                searchBox.focus();
+            });
+
             // --- 3. Utility Functions ---
             
             /**
